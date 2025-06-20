@@ -1,0 +1,11 @@
+{
+  "Version": 1,
+  "Hash": "FxRTG49STFyeUNggLwPlzSxlroTSeGF3nAJuN8VKUsM=",
+  "Source": "FintechApi",
+  "BasePath": "_content/FintechApi",
+  "Mode": "Default",
+  "ManifestType": "Build",
+  "ReferencedProjectsConfiguration": [],
+  "DiscoveryPatterns": [],
+  "Assets": []
+}
