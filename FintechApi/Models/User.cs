@@ -13,5 +13,7 @@ namespace FintechApi.Models
         public string Email { get; set; }
         [JsonPropertyName("assets")]
         public List<Asset> Assets { get; set; } = new List<Asset>();
+        [JsonIgnore]
+        public string PasswordHash { get; set; }
     }
 } 
