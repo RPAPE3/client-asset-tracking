@@ -8,6 +8,7 @@ using FintechApi.Data;
 using FintechApi.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authorization;
 
 namespace FintechApi.Controllers
 {
@@ -25,6 +26,7 @@ namespace FintechApi.Controllers
             _config = config;
         }
 
+        [AllowAnonymous]
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterRequest request)
         {
@@ -48,6 +50,7 @@ namespace FintechApi.Controllers
             return Ok(new { token });
         }
 
+        [AllowAnonymous]
         [HttpPost("login")]
         public async Task<IActionResult> Login([FromBody] LoginRequest request)
         {

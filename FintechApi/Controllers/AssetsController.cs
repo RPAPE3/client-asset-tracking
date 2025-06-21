@@ -6,11 +6,13 @@ using System.Collections.Generic;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authorization;
 
 namespace FintechApi.Controllers
 {
     [ApiController]
     [Route("api/users/{userId}/assets")]
+    [Authorize]
     public class AssetsController : ControllerBase
     {
         private readonly AppDbContext _context;
