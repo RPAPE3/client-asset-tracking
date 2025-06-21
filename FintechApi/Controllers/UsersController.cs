@@ -2,16 +2,12 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using FintechApi.Data;
 using FintechApi.Models;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using Microsoft.AspNetCore.Authorization;
 
 namespace FintechApi.Controllers
 {
-    [ApiController]
     [Route("api/[controller]")]
-    [Authorize]
-    public class UsersController : ControllerBase
+    public class UsersController : BaseController
     {
         private readonly AppDbContext _context;
 
@@ -20,23 +16,48 @@ namespace FintechApi.Controllers
             _context = context;
         }
 
-        // GET: api/users
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<User>>> GetUsers()
+        // GET: api/users/me - Get current user's profile
+        [HttpGet("me")]
+        public async Task<ActionResult<User>> GetCurrentUser()
         {
-            return await _context.Users.Include(u => u.Assets).ToListAsync();
-        }
+            var userId = GetCurrentUserId();
+            if (userId == null)
+            {
+                return Unauthorized();
+            }
 
-        // GET: api/users/{id}
-        [HttpGet("{id}")]
-        public async Task<ActionResult<User>> GetUser(int id)
-        {
-            var user = await _context.Users.Include(u => u.Assets).FirstOrDefaultAsync(u => u.Id == id);
+            var user = await _context.Users
+                .Include(u => u.Assets)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+
             if (user == null)
             {
                 return NotFound();
             }
-            return user;
+
+            return Ok(user);
+        }
+
+        // GET: api/users/{id} - Only allow access to own profile
+        [HttpGet("{id}")]
+        public async Task<ActionResult<User>> GetUser(int id)
+        {
+            var authResult = EnsureUserAuthorization(id);
+            if (authResult != null)
+            {
+                return authResult;
+            }
+
+            var user = await _context.Users
+                .Include(u => u.Assets)
+                .FirstOrDefaultAsync(u => u.Id == id);
+
+            if (user == null)
+            {
+                return NotFound();
+            }
+
+            return Ok(user);
         }
 
         // POST: api/users
@@ -48,14 +69,21 @@ namespace FintechApi.Controllers
             return CreatedAtAction(nameof(GetUser), new { id = user.Id }, user);
         }
 
-        // PUT: api/users/{id}
+        // PUT: api/users/{id} - Only allow updating own profile
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateUser(int id, User user)
         {
+            var authResult = EnsureUserAuthorization(id);
+            if (authResult != null)
+            {
+                return authResult;
+            }
+
             if (id != user.Id)
             {
-                return BadRequest();
+                return BadRequest("User ID mismatch");
             }
+
             _context.Entry(user).State = EntityState.Modified;
             try
             {
@@ -67,23 +95,27 @@ namespace FintechApi.Controllers
                 {
                     return NotFound();
                 }
-                else
-                {
-                    throw;
-                }
+                throw;
             }
             return NoContent();
         }
 
-        // DELETE: api/users/{id}
+        // DELETE: api/users/{id} - Only allow deleting own profile
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteUser(int id)
         {
+            var authResult = EnsureUserAuthorization(id);
+            if (authResult != null)
+            {
+                return authResult;
+            }
+
             var user = await _context.Users.FindAsync(id);
             if (user == null)
             {
                 return NotFound();
             }
+
             _context.Users.Remove(user);
             await _context.SaveChangesAsync();
             return NoContent();

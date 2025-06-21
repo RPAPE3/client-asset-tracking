@@ -9,12 +9,12 @@ using FintechApi.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
+using FintechApi.DTOs;
 
 namespace FintechApi.Controllers
 {
-    [ApiController]
     [Route("api/[controller]")]
-    public class AuthController : ControllerBase
+    public class AuthController : BaseController
     {
         private readonly AppDbContext _context;
         private readonly IConfiguration _config;
@@ -28,7 +28,7 @@ namespace FintechApi.Controllers
 
         [AllowAnonymous]
         [HttpPost("register")]
-        public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+        public async Task<ActionResult<AuthResponse>> Register([FromBody] RegisterRequest request)
         {
             // Check if user already exists
             if (await _context.Users.AnyAsync(u => u.Email == request.Email))
@@ -47,12 +47,18 @@ namespace FintechApi.Controllers
             await _context.SaveChangesAsync();
 
             var token = GenerateJwtToken(user);
-            return Ok(new { token });
+            return Ok(new AuthResponse
+            {
+                Token = token,
+                UserId = user.Id.ToString(),
+                Email = user.Email,
+                Name = user.Name
+            });
         }
 
         [AllowAnonymous]
         [HttpPost("login")]
-        public async Task<IActionResult> Login([FromBody] LoginRequest request)
+        public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request)
         {
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email);
             if (user == null)
@@ -67,7 +73,13 @@ namespace FintechApi.Controllers
             }
 
             var token = GenerateJwtToken(user);
-            return Ok(new { token });
+            return Ok(new AuthResponse
+            {
+                Token = token,
+                UserId = user.Id.ToString(),
+                Email = user.Email,
+                Name = user.Name
+            });
         }
 
         private string GenerateJwtToken(User user)
@@ -93,18 +105,5 @@ namespace FintechApi.Controllers
 
             return new JwtSecurityTokenHandler().WriteToken(token);
         }
-    }
-
-    public class RegisterRequest
-    {
-        public string Name { get; set; }
-        public string Email { get; set; }
-        public string Password { get; set; }
-    }
-
-    public class LoginRequest
-    {
-        public string Email { get; set; }
-        public string Password { get; set; }
     }
 } 

@@ -4,16 +4,12 @@ using FintechApi.Data;
 using FintechApi.Models;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using System.Linq;
 using System.Text.Json;
-using Microsoft.AspNetCore.Authorization;
 
 namespace FintechApi.Controllers
 {
-    [ApiController]
     [Route("api/users/{userId}/assets")]
-    [Authorize]
-    public class AssetsController : ControllerBase
+    public class AssetsController : BaseController
     {
         private readonly AppDbContext _context;
 
@@ -22,10 +18,16 @@ namespace FintechApi.Controllers
             _context = context;
         }
 
-        // GET: api/users/{userId}/assets
+        // GET: api/users/{userId}/assets - Only allow access to own assets
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Asset>>> GetAssetsForUser(int userId)
         {
+            var authResult = EnsureUserAuthorization(userId);
+            if (authResult != null)
+            {
+                return authResult;
+            }
+
             var user = await _context.Users.Include(u => u.Assets).FirstOrDefaultAsync(u => u.Id == userId);
             if (user == null)
             {
@@ -34,70 +36,69 @@ namespace FintechApi.Controllers
             return Ok(user.Assets);
         }
 
-        // GET: api/users/{userId}/assets/{assetId}
+        // GET: api/users/{userId}/assets/{assetId} - Only allow access to own assets
         [HttpGet("{assetId}")]
         public async Task<ActionResult<Asset>> GetAssetForUser(int userId, int assetId)
         {
+            var authResult = EnsureUserAuthorization(userId);
+            if (authResult != null)
+            {
+                return authResult;
+            }
+
             var asset = await _context.Assets.FirstOrDefaultAsync(a => a.Id == assetId && a.UserId == userId);
             if (asset == null)
             {
-                return NotFound();
+                return NotFound($"Asset with id {assetId} not found for user {userId}.");
             }
-            return asset;
+            return Ok(asset);
         }
 
-
-
-        // POST: api/users/{userId}/assets
+        // POST: api/users/{userId}/assets - Only allow creating assets for own account
         [HttpPost]
         public async Task<ActionResult<Asset>> CreateAssetForUser(int userId, [FromBody] JsonElement assetJson)
         {
-            var assetType = assetJson.GetProperty("assetType").GetString();
-            Asset asset = assetType switch
+            var authResult = EnsureUserAuthorization(userId);
+            if (authResult != null)
             {
-                "Stock" => assetJson.Deserialize<StockAsset>(),
-                "Crypto" => assetJson.Deserialize<CryptoAsset>(),
-                "Cash" => assetJson.Deserialize<CashAsset>(),
-                _ => throw new ArgumentException("Invalid assetType")
-            };
+                return authResult;
+            }
 
-            // Debug output
-            Console.WriteLine($"DEBUG: assetType={assetType}, Name={assetJson.GetProperty("name").GetString()}");
-
+            var asset = DeserializeAsset(assetJson);
             asset.UserId = userId;
+            
             _context.Assets.Add(asset);
             await _context.SaveChangesAsync();
+            
             return CreatedAtAction(nameof(GetAssetForUser), new { userId = userId, assetId = asset.Id }, asset);
         }
 
-        // PUT: api/users/{userId}/assets/{assetId}
+        // PUT: api/users/{userId}/assets/{assetId} - Only allow updating own assets
         [HttpPut("{assetId}")]
         public async Task<IActionResult> UpdateAssetForUser(int userId, int assetId, [FromBody] JsonElement assetJson)
         {
-            var assetType = assetJson.GetProperty("assetType").GetString();
-            Asset asset = assetType switch
+            var authResult = EnsureUserAuthorization(userId);
+            if (authResult != null)
             {
-                "Stock" => assetJson.Deserialize<StockAsset>(),
-                "Crypto" => assetJson.Deserialize<CryptoAsset>(),
-                "Cash" => assetJson.Deserialize<CashAsset>(),
-                _ => throw new ArgumentException("Invalid assetType")
-            };
+                return authResult;
+            }
 
+            var asset = DeserializeAsset(assetJson);
             if (assetId != asset.Id)
             {
-                return BadRequest();
+                return BadRequest("Asset ID mismatch");
             }
 
-            // Always set the userId from the route
             asset.UserId = userId;
 
-            var exists = await _context.Assets.AnyAsync(a => a.Id == assetId && a.UserId == userId);
-            if (!exists)
+            var existingAsset = await _context.Assets.FirstOrDefaultAsync(a => a.Id == assetId && a.UserId == userId);
+            if (existingAsset == null)
             {
-                return NotFound();
+                return NotFound($"Asset with id {assetId} not found for user {userId}.");
             }
 
-            _context.Entry(asset).State = EntityState.Modified;
+            _context.Entry(existingAsset).CurrentValues.SetValues(asset);
+            
             try
             {
                 await _context.SaveChangesAsync();
@@ -106,28 +107,45 @@ namespace FintechApi.Controllers
             {
                 if (!await _context.Assets.AnyAsync(a => a.Id == assetId && a.UserId == userId))
                 {
-                    return NotFound();
+                    return NotFound($"Asset with id {assetId} not found for user {userId}.");
                 }
-                else
-                {
-                    throw;
-                }
+                throw;
             }
             return NoContent();
         }
 
-        // DELETE: api/users/{userId}/assets/{assetId}
+        // DELETE: api/users/{userId}/assets/{assetId} - Only allow deleting own assets
         [HttpDelete("{assetId}")]
         public async Task<IActionResult> DeleteAssetForUser(int userId, int assetId)
         {
+            var authResult = EnsureUserAuthorization(userId);
+            if (authResult != null)
+            {
+                return authResult;
+            }
+
             var asset = await _context.Assets.FirstOrDefaultAsync(a => a.Id == assetId && a.UserId == userId);
             if (asset == null)
             {
-                return NotFound();
+                return NotFound($"Asset with id {assetId} not found for user {userId}.");
             }
+            
             _context.Assets.Remove(asset);
             await _context.SaveChangesAsync();
             return NoContent();
+        }
+
+        // Helper method to deserialize asset based on type
+        private static Asset DeserializeAsset(JsonElement assetJson)
+        {
+            var assetType = assetJson.GetProperty("assetType").GetString();
+            return assetType switch
+            {
+                "Stock" => assetJson.Deserialize<StockAsset>(),
+                "Crypto" => assetJson.Deserialize<CryptoAsset>(),
+                "Cash" => assetJson.Deserialize<CashAsset>(),
+                _ => throw new ArgumentException($"Invalid asset type: {assetType}")
+            };
         }
     }
 }
